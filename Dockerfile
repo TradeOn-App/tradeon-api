@@ -1,24 +1,18 @@
-FROM php:8.2-cli
+FROM php:8.2-cli-alpine
 
-RUN apt-get update && apt-get install -y \
-    libpq-dev \
+RUN apk add --no-cache \
+    postgresql-dev \
     libzip-dev \
     unzip \
-    git \
     && docker-php-ext-install pdo pdo_pgsql zip \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/cache/apk/*
 
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader
-
 COPY . .
-RUN composer dump-autoload --optimize
-
-RUN php artisan key:generate --show > /dev/null 2>&1 || true
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 EXPOSE 8000
 
