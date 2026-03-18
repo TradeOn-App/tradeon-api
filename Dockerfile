@@ -1,20 +1,20 @@
-FROM php:8.2-cli-alpine
+FROM php:8.2-cli
 
-RUN apk add --no-cache \
-    postgresql-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
     libzip-dev \
     libxml2-dev \
-    oniguruma-dev \
+    libonig-dev \
     unzip \
     && docker-php-ext-install pdo pdo_pgsql zip mbstring dom xml fileinfo \
-    && rm -rf /var/cache/apk/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
 COPY . .
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --no-dev --optimize-autoloader --no-interaction 2>&1
 
 EXPOSE 8000
 
