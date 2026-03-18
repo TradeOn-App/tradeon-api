@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Http\Controllers\Api\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Client;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+
+class ClientController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Client::with('user');
+
+        if ($request->filled('search')) {
+            $s = $request->search;
+            $query->where(function ($q) use ($s) {
+                $q->where('full_name', 'ilike', "%{$s}%")
+                  ->orWhere('document', 'ilike', "%{$s}%");
+            });
+        }
+
+        return $query->orderBy('full_name')->paginate($request->input('per_page', 15));
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'full_name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'document' => 'required|string|max:20',
+            'phone' => 'nullable|string|max:20',
+            'notes' => 'nullable|string',
+        ]);
+
+        $user = User::create([
+            'name' => $request->full_name,
+            'email' => $request->email,
+            'password' => Hash::make('senha123'),
+            'role' => 'client',
+        ]);
+
+        $client = Client::create([
+            'user_id' => $user->id,
+            'full_name' => $request->full_name,
+            'document' => $request->document,
+            'phone' => $request->phone,
+            'notes' => $request->notes,
+            'is_active' => true,
+        ]);
+
+        return response()->json($client->load('user'), 201);
+    }
+
+    public function show(Client $client)
+    {
+        return $client->load('user');
+    }
+
+    public function update(Request $request, Client $client)
+    {
+        $request->validate([
+            'full_name' => 'sometimes|string|max:255',
+            'document' => 'sometimes|string|max:20',
+            'phone' => 'nullable|string|max:20',
+            'notes' => 'nullable|string',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        $client->update($request->only('full_name', 'document', 'phone', 'notes', 'is_active'));
+
+        if ($request->filled('full_name')) {
+            $client->user->update(['name' => $request->full_name]);
+        }
+
+        return $client->load('user');
+    }
+
+    public function destroy(Client $client)
+    {
+        $client->user->delete();
+        $client->delete();
+
+        return response()->json(['message' => 'Deleted']);
+    }
+}
