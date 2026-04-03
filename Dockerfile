@@ -18,8 +18,8 @@ RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/lo
     && chmod -R 775 bootstrap/cache storage
 RUN composer install --no-dev --optimize-autoloader --no-interaction 2>&1
 
-EXPOSE 8000
+EXPOSE ${PORT:-8000}
 
 CMD php artisan migrate --force && \
     php artisan db:seed --force && \
-    php artisan serve --host=0.0.0.0 --port=8000
+    php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
