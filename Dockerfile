@@ -20,10 +20,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction 2>&1
 
 EXPOSE ${PORT:-8000}
 
-CMD mkdir -p storage/framework/{sessions,views,cache} storage/logs bootstrap/cache && \
+CMD mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache storage/logs bootstrap/cache && \
     chmod -R 775 storage bootstrap/cache && \
     php artisan config:clear && \
-    php artisan view:clear && \
     php artisan migrate --force && \
     php artisan db:seed --force && \
     php artisan serve --host=0.0.0.0 --port=${PORT:-8000}
