@@ -14,6 +14,8 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
 COPY . .
+RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/logs \
+    && chmod -R 775 bootstrap/cache storage
 RUN composer install --no-dev --optimize-autoloader --no-interaction 2>&1
 
 EXPOSE 8000
