@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::apiResource('clients', AdminClientController::class);
         Route::apiResource('collaborators', CollaboratorController::class);
+        Route::get('collaborators/{collaborator}/report', [CollaboratorController::class, 'report']);
         Route::apiResource('commission-rules', CommissionRuleController::class);
         Route::apiResource('client-transactions', ClientTransactionController::class);
         Route::apiResource('commission-transactions', CommissionTransactionController::class);

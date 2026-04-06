@@ -58,27 +58,103 @@ class DashboardController extends Controller
 
     public function adminMetrics(Request $request)
     {
+        $clientId = $request->get('client_id');
+        $from = $request->get('from');
+        $to = $request->get('to');
+
+        // Client transactions query with optional filters
+        $ctQuery = ClientTransaction::query();
+        if ($clientId) {
+            $ctQuery->where('client_id', $clientId);
+        }
+        if ($from || $to) {
+            $ctQuery->whereHas('cashFlowTransaction', function ($q) use ($from, $to) {
+                if ($from) $q->where('transaction_date', '>=', $from);
+                if ($to) $q->where('transaction_date', '<=', $to);
+            });
+        }
+
+        $totalDeposits = (clone $ctQuery)->where('type', 'deposit')->sum('amount');
+        $totalWithdrawals = (clone $ctQuery)->where('type', 'withdrawal')->sum('amount');
+
+        // Clients count
         $totalClients = Client::where('is_active', true)->count();
 
-        $totalDeposits = ClientTransaction::where('type', 'deposit')->sum('amount');
-        $totalWithdrawals = ClientTransaction::where('type', 'withdrawal')->sum('amount');
+        // P2P with date filter
+        $p2pQuery = P2pOperation::query();
+        if ($from) $p2pQuery->where('operation_date', '>=', $from);
+        if ($to) $p2pQuery->where('operation_date', '<=', $to);
+        $totalP2p = (clone $p2pQuery)->sum('amount');
+        $p2pCount = (clone $p2pQuery)->count();
 
-        $totalP2p = P2pOperation::sum('amount');
-        $p2pCount = P2pOperation::count();
+        // Commissions with date filter
+        $commQuery = CommissionTransaction::query();
+        if ($from || $to) {
+            $commQuery->whereHas('cashFlowTransaction', function ($q) use ($from, $to) {
+                if ($from) $q->where('transaction_date', '>=', $from);
+                if ($to) $q->where('transaction_date', '<=', $to);
+            });
+        }
+        $totalCommissions = $commQuery->sum('amount');
 
-        $totalCommissions = CommissionTransaction::sum('amount');
+        // Cash flow with date filter
+        $cfEntryQuery = CashFlowTransaction::where('type', 'entry');
+        $cfExitQuery = CashFlowTransaction::where('type', 'exit');
+        if ($from) {
+            $cfEntryQuery->where('transaction_date', '>=', $from);
+            $cfExitQuery->where('transaction_date', '>=', $from);
+        }
+        if ($to) {
+            $cfEntryQuery->where('transaction_date', '<=', $to);
+            $cfExitQuery->where('transaction_date', '<=', $to);
+        }
+        $cashFlowEntries = $cfEntryQuery->sum('amount');
+        $cashFlowExits = $cfExitQuery->sum('amount');
 
-        $cashFlowEntries = CashFlowTransaction::where('type', 'entry')->sum('amount');
-        $cashFlowExits = CashFlowTransaction::where('type', 'exit')->sum('amount');
+        // Profit: from monthly reports
+        $reportQuery = MonthlyReport::query();
+        if ($clientId) {
+            $reportQuery->where('client_id', $clientId);
+        }
+        if ($from) {
+            $fromDate = \Carbon\Carbon::parse($from);
+            $reportQuery->where(function ($q) use ($fromDate) {
+                $q->where('year', '>', $fromDate->year)
+                  ->orWhere(function ($q2) use ($fromDate) {
+                      $q2->where('year', $fromDate->year)->where('month', '>=', $fromDate->month);
+                  });
+            });
+        }
+        if ($to) {
+            $toDate = \Carbon\Carbon::parse($to);
+            $reportQuery->where(function ($q) use ($toDate) {
+                $q->where('year', '<', $toDate->year)
+                  ->orWhere(function ($q2) use ($toDate) {
+                      $q2->where('year', $toDate->year)->where('month', '<=', $toDate->month);
+                  });
+            });
+        }
+        $profitReports = $reportQuery->get();
+        $totalProfit = $profitReports->sum(function ($r) {
+            return (float) $r->total_deposits - (float) $r->total_withdrawals;
+        });
+        $avgProfitability = $profitReports->count() > 0
+            ? round($profitReports->avg('profitability_percent'), 2)
+            : 0;
 
-        $monthlyData = DB::table('monthly_reports')
+        // Chart data - monthly reports
+        $monthlyQuery = DB::table('monthly_reports')
             ->select(
                 'year',
                 'month',
                 DB::raw('SUM(total_deposits) as deposits'),
                 DB::raw('SUM(total_withdrawals) as withdrawals'),
                 DB::raw('AVG(profitability_percent) as avg_profitability')
-            )
+            );
+        if ($clientId) {
+            $monthlyQuery->where('client_id', $clientId);
+        }
+        $monthlyData = $monthlyQuery
             ->groupBy('year', 'month')
             ->orderBy('year')
             ->orderBy('month')
@@ -93,13 +169,17 @@ class DashboardController extends Controller
                 ];
             });
 
-        $p2pMonthly = DB::table('p2p_operations')
+        // P2P chart
+        $p2pChartQuery = DB::table('p2p_operations')
             ->select(
                 DB::raw("EXTRACT(YEAR FROM operation_date) as year"),
                 DB::raw("EXTRACT(MONTH FROM operation_date) as month"),
                 DB::raw('SUM(amount) as total'),
                 DB::raw('COUNT(*) as count')
-            )
+            );
+        if ($from) $p2pChartQuery->where('operation_date', '>=', $from);
+        if ($to) $p2pChartQuery->where('operation_date', '<=', $to);
+        $p2pMonthly = $p2pChartQuery
             ->groupBy('year', 'month')
             ->orderBy('year')
             ->orderBy('month')
@@ -123,6 +203,8 @@ class DashboardController extends Controller
                 'total_commissions' => (float) $totalCommissions,
                 'cash_flow_entries' => (float) $cashFlowEntries,
                 'cash_flow_exits' => (float) $cashFlowExits,
+                'total_profit' => (float) $totalProfit,
+                'avg_profitability' => $avgProfitability,
             ],
             'chart' => $monthlyData,
             'p2p_chart' => $p2pMonthly,

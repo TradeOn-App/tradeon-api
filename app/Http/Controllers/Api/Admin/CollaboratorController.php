@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Collaborator;
+use App\Models\CommissionTransaction;
 use Illuminate\Http\Request;
 
 class CollaboratorController extends Controller
@@ -62,5 +63,43 @@ class CollaboratorController extends Controller
         $collaborator->delete();
 
         return response()->json(['message' => 'Deleted']);
+    }
+
+    public function report(Request $request, Collaborator $collaborator)
+    {
+        $query = CommissionTransaction::where('collaborator_id', $collaborator->id)
+            ->with(['currency', 'cashFlowTransaction', 'commissionRule']);
+
+        if ($request->filled('from')) {
+            $query->whereHas('cashFlowTransaction', function ($q) use ($request) {
+                $q->where('transaction_date', '>=', $request->from);
+            });
+        }
+        if ($request->filled('to')) {
+            $query->whereHas('cashFlowTransaction', function ($q) use ($request) {
+                $q->where('transaction_date', '<=', $request->to);
+            });
+        }
+
+        $transactions = $query->orderByDesc('created_at')->get();
+
+        $totalEntries = $transactions->filter(fn ($t) => $t->cashFlowTransaction?->type === 'entry')->sum('amount');
+        $totalExits = $transactions->filter(fn ($t) => $t->cashFlowTransaction?->type === 'exit')->sum('amount');
+        $totalCommission = $transactions->sum('amount');
+        $profit = $totalEntries - $totalExits;
+        $profitPercent = $totalEntries > 0 ? round(($profit / $totalEntries) * 100, 2) : 0;
+
+        return response()->json([
+            'collaborator' => $collaborator->load('commissionRule'),
+            'summary' => [
+                'total_entries' => (float) $totalEntries,
+                'total_exits' => (float) $totalExits,
+                'total_commission' => (float) $totalCommission,
+                'profit' => (float) $profit,
+                'profit_percent' => $profitPercent,
+                'transaction_count' => $transactions->count(),
+            ],
+            'transactions' => $transactions,
+        ]);
     }
 }

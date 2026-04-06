@@ -17,6 +17,9 @@ class P2pOperation extends Model
         'reason',
         'operation_date',
         'reference',
+        'wallet_from',
+        'wallet_to',
+        'dollar_quotation',
         'created_by',
     ];
 
@@ -24,6 +27,7 @@ class P2pOperation extends Model
     {
         return [
             'amount' => 'decimal:8',
+            'dollar_quotation' => 'decimal:8',
             'operation_date' => 'date',
         ];
     }

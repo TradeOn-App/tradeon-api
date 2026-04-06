@@ -34,6 +34,9 @@ class P2pOperationController extends Controller
             'reason' => 'required|string',
             'operation_date' => 'required|date',
             'reference' => 'nullable|string|max:100',
+            'wallet_from' => 'nullable|string|max:255',
+            'wallet_to' => 'nullable|string|max:255',
+            'dollar_quotation' => 'nullable|numeric|min:0',
         ]);
 
         $validated['created_by'] = $request->user()->id;
@@ -58,6 +61,9 @@ class P2pOperationController extends Controller
             'reason' => 'sometimes|string',
             'operation_date' => 'sometimes|date',
             'reference' => 'nullable|string|max:100',
+            'wallet_from' => 'nullable|string|max:255',
+            'wallet_to' => 'nullable|string|max:255',
+            'dollar_quotation' => 'nullable|numeric|min:0',
         ]);
 
         $p2p_operation->update($validated);
