@@ -49,7 +49,19 @@ class AuthController extends Controller
     public function changePassword(Request $request)
     {
         $request->validate([
-            'password' => 'required|string|min:6|confirmed',
+            'password' => [
+                'required',
+                'string',
+                'min:12',
+                'confirmed',
+                'regex:/[a-z]/',
+                'regex:/[A-Z]/',
+                'regex:/[0-9]/',
+                'regex:/[@$!%*?&#]/',
+            ],
+        ], [
+            'password.min' => 'A senha deve ter no mínimo 12 caracteres.',
+            'password.regex' => 'A senha deve conter letras maiúsculas, minúsculas, números e caracteres especiais.',
         ]);
 
         $user = $request->user();

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedField;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -33,6 +34,9 @@ class CashFlowTransaction extends Model
             'amount_usdt_equivalent' => 'decimal:8',
             'quotation_at_transaction' => 'decimal:8',
             'transaction_date' => 'date',
+            'wallet_origin' => EncryptedField::class,
+            'wallet_destination' => EncryptedField::class,
+            'tx_hash' => EncryptedField::class,
         ];
     }
 

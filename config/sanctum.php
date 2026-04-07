@@ -7,7 +7,7 @@ return [
         env('APP_URL') ? ','.parse_url(env('APP_URL'), PHP_URL_HOST) : ''
     ))),
     'guard' => ['web'],
-    'expiration' => null,
+    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 1440), // 24 horas em minutos
     'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
     'middleware' => [
         'authenticate_session' => Laravel\Sanctum\Http\Middleware\AuthenticateSession::class,

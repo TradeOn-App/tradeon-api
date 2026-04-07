@@ -38,13 +38,13 @@ class ReportController extends Controller
         $month = (int) $request->month;
         $year = (int) $request->year;
 
-        // Transações do período com cashFlowTransaction para cotação
+        // Transações do período com cashFlowTransaction para cotação (eager loaded para evitar N+1)
         $transactions = ClientTransaction::where('client_id', $client->id)
             ->whereHas('cashFlowTransaction', function ($q) use ($month, $year) {
                 $q->whereMonth('transaction_date', $month)
                   ->whereYear('transaction_date', $year);
             })
-            ->with('cashFlowTransaction')
+            ->with('cashFlowTransaction.currency')
             ->get();
 
         // Valor Inicial (deposit) + Aportes (contribution) no período — em USDT
@@ -211,25 +211,42 @@ class ReportController extends Controller
     public function batchPdf(Request $request)
     {
         $request->validate([
-            'ids' => 'required|array|min:1',
+            'ids' => 'required|array|min:1|max:50',
             'ids.*' => 'exists:monthly_reports,id',
         ]);
 
         $reports = MonthlyReport::with('client')->whereIn('id', $request->ids)->orderByDesc('year')->orderByDesc('month')->get();
         $monthNames = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
+        // Pré-carregar todas as transações de todos os reports de uma vez (evita N+1)
+        $clientIds = $reports->pluck('client_id')->unique();
+        $periods = $reports->map(fn ($r) => ['client_id' => $r->client_id, 'month' => $r->month, 'year' => $r->year]);
+
+        $allTransactions = ClientTransaction::whereIn('client_id', $clientIds)
+            ->whereHas('cashFlowTransaction', function ($q) use ($reports) {
+                $q->where(function ($sub) use ($reports) {
+                    foreach ($reports as $report) {
+                        $sub->orWhere(function ($w) use ($report) {
+                            $w->whereYear('transaction_date', $report->year)
+                              ->whereMonth('transaction_date', $report->month);
+                        });
+                    }
+                });
+            })
+            ->with('cashFlowTransaction.currency')
+            ->orderBy('created_at')
+            ->get();
+
         $pages = [];
         foreach ($reports as $report) {
             $client = $report->client;
 
-            $transactions = ClientTransaction::where('client_id', $client->id)
-                ->whereHas('cashFlowTransaction', function ($q) use ($report) {
-                    $q->whereYear('transaction_date', $report->year)
-                        ->whereMonth('transaction_date', $report->month);
-                })
-                ->with('cashFlowTransaction.currency')
-                ->orderBy('created_at')
-                ->get();
+            $transactions = $allTransactions->filter(function ($t) use ($report) {
+                $cfDate = $t->cashFlowTransaction->transaction_date;
+                return $t->client_id === $report->client_id
+                    && $cfDate->year === $report->year
+                    && $cfDate->month === $report->month;
+            })->values();
 
             $nextMonth = $report->month === 12 ? 1 : $report->month + 1;
             $nextYear = $report->month === 12 ? $report->year + 1 : $report->year;

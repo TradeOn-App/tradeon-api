@@ -22,7 +22,8 @@ class ClientTransactionController extends Controller
             $query->where('type', $request->type);
         }
 
-        return $query->orderByDesc('created_at')->paginate($request->input('per_page', 15));
+        $perPage = min((int) $request->input('per_page', 15), 100);
+        return $query->orderByDesc('created_at')->paginate($perPage);
     }
 
     public function store(Request $request)

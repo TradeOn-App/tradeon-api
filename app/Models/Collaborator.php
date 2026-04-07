@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedField;
 use Illuminate\Database\Eloquent\Model;
 
 class Collaborator extends Model
@@ -16,11 +17,16 @@ class Collaborator extends Model
         'is_active',
     ];
 
-    protected $casts = [
-        'is_active' => 'boolean',
-        'commission' => 'decimal:4',
-        'fixed' => 'decimal:8',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+            'commission' => 'decimal:4',
+            'fixed' => 'decimal:8',
+            'cpf' => EncryptedField::class,
+            'wallet' => EncryptedField::class,
+        ];
+    }
 
     public function internalTransactions()
     {

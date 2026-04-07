@@ -15,13 +15,13 @@ class CollaboratorController extends Controller
 
         if ($request->filled('search')) {
             $s = $request->search;
-            $query->where(function ($q) use ($s) {
-                $q->where('name', 'ilike', "%{$s}%")
-                  ->orWhere('cpf', 'ilike', "%{$s}%");
-            });
+            // name não é criptografado, busca normal
+            // cpf é criptografado, não pode usar LIKE no banco
+            $query->where('name', 'ilike', "%{$s}%");
         }
 
-        return $query->orderBy('name')->paginate($request->input('per_page', 15));
+        $perPage = min((int) $request->input('per_page', 15), 100);
+        return $query->orderBy('name')->paginate($perPage);
     }
 
     public function store(Request $request)
@@ -85,11 +85,22 @@ class CollaboratorController extends Controller
             });
         }
 
-        $transactions = $query->orderByDesc('created_at')->get();
+        $transactions = $query->orderByDesc('created_at')->paginate($request->input('per_page', 50));
 
-        $totalEntries = $transactions->filter(fn ($t) => $t->cashFlowTransaction?->type === 'entry')->sum('amount');
-        $totalExits = $transactions->filter(fn ($t) => $t->cashFlowTransaction?->type === 'exit')->sum('amount');
-        $totalCommission = $transactions->sum('amount');
+        // Summary calculado com query separada (não depende de paginação)
+        $summaryQuery = CommissionTransaction::where('collaborator_id', $collaborator->id)
+            ->with('cashFlowTransaction');
+        if ($request->filled('from')) {
+            $summaryQuery->whereHas('cashFlowTransaction', fn ($q) => $q->where('transaction_date', '>=', $request->from));
+        }
+        if ($request->filled('to')) {
+            $summaryQuery->whereHas('cashFlowTransaction', fn ($q) => $q->where('transaction_date', '<=', $request->to));
+        }
+        $allForSummary = $summaryQuery->get();
+
+        $totalEntries = $allForSummary->filter(fn ($t) => $t->cashFlowTransaction?->type === 'entry')->sum('amount');
+        $totalExits = $allForSummary->filter(fn ($t) => $t->cashFlowTransaction?->type === 'exit')->sum('amount');
+        $totalCommission = $allForSummary->sum('amount');
         $profit = $totalEntries - $totalExits;
         $profitPercent = $totalEntries > 0 ? round(($profit / $totalEntries) * 100, 2) : 0;
 
@@ -101,7 +112,7 @@ class CollaboratorController extends Controller
                 'total_commission' => (float) $totalCommission,
                 'profit' => (float) $profit,
                 'profit_percent' => $profitPercent,
-                'transaction_count' => $transactions->count(),
+                'transaction_count' => $allForSummary->count(),
             ],
             'transactions' => $transactions,
         ]);

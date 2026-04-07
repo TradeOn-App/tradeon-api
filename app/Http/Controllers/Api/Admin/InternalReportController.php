@@ -112,20 +112,35 @@ class InternalReportController extends Controller
     public function batchPdf(Request $request)
     {
         $request->validate([
-            'ids' => 'required|array|min:1',
+            'ids' => 'required|array|min:1|max:50',
             'ids.*' => 'exists:internal_reports,id',
         ]);
 
         $reports = InternalReport::with('collaborator')->whereIn('id', $request->ids)->orderByDesc('year')->orderByDesc('month')->get();
         $monthNames = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
+        // Pré-carregar todas as transações de uma vez (evita N+1)
+        $collaboratorIds = $reports->pluck('collaborator_id')->unique();
+        $allTransactions = InternalTransaction::whereIn('collaborator_id', $collaboratorIds)
+            ->where(function ($q) use ($reports) {
+                foreach ($reports as $report) {
+                    $q->orWhere(function ($w) use ($report) {
+                        $w->where('collaborator_id', $report->collaborator_id)
+                          ->whereMonth('transaction_date', $report->month)
+                          ->whereYear('transaction_date', $report->year);
+                    });
+                }
+            })
+            ->orderBy('created_at')
+            ->get();
+
         $pages = [];
         foreach ($reports as $report) {
-            $transactions = InternalTransaction::where('collaborator_id', $report->collaborator_id)
-                ->whereMonth('transaction_date', $report->month)
-                ->whereYear('transaction_date', $report->year)
-                ->orderBy('created_at')
-                ->get();
+            $transactions = $allTransactions->filter(function ($t) use ($report) {
+                return $t->collaborator_id === $report->collaborator_id
+                    && $t->transaction_date->month === $report->month
+                    && $t->transaction_date->year === $report->year;
+            })->values();
 
             $nextMonth = $report->month === 12 ? 1 : $report->month + 1;
             $nextYear = $report->month === 12 ? $report->year + 1 : $report->year;
@@ -140,7 +155,6 @@ class InternalReportController extends Controller
             ];
         }
 
-        // Totais
         $totalUpdatedValue = $reports->sum(fn ($r) => (float) $r->updated_value);
         $avgProfitPct = $reports->count() > 0 ? $reports->avg('profit_percentage') : 0;
 

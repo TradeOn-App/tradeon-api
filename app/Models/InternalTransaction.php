@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedField;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -27,6 +28,8 @@ class InternalTransaction extends Model
             'amount' => 'decimal:8',
             'quotation_at_transaction' => 'decimal:8',
             'transaction_date' => 'date',
+            'wallet_destination' => EncryptedField::class,
+            'tx_hash' => EncryptedField::class,
         ];
     }
 

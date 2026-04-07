@@ -16,13 +16,13 @@ class ClientController extends Controller
 
         if ($request->filled('search')) {
             $s = $request->search;
-            $query->where(function ($q) use ($s) {
-                $q->where('full_name', 'ilike', "%{$s}%")
-                  ->orWhere('document', 'ilike', "%{$s}%");
-            });
+            // full_name não é criptografado, busca normal
+            // document é criptografado, não pode usar LIKE no banco
+            $query->where('full_name', 'ilike', "%{$s}%");
         }
 
-        return $query->orderBy('full_name')->paginate($request->input('per_page', 15));
+        $perPage = min((int) $request->input('per_page', 15), 100);
+        return $query->orderBy('full_name')->paginate($perPage);
     }
 
     public function store(Request $request)
@@ -30,7 +30,7 @@ class ClientController extends Controller
         $request->validate([
             'full_name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|min:12',
             'document' => 'required|string|max:20',
             'phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',

@@ -1,0 +1,44 @@
+FROM php:8.4-fpm-alpine
+
+RUN apk add --no-cache \
+    nginx \
+    libpq-dev \
+    libzip-dev \
+    libxml2-dev \
+    oniguruma-dev \
+    && docker-php-ext-install pdo pdo_pgsql zip mbstring dom xml fileinfo opcache \
+    && apk del --no-cache
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+COPY . .
+RUN mkdir -p bootstrap/cache storage/framework/{sessions,views,cache} storage/logs \
+    && chmod -R 775 bootstrap/cache storage
+RUN composer install --no-dev --optimize-autoloader --no-interaction 2>&1
+
+# Nginx config
+COPY docker/nginx.conf /etc/nginx/http.d/default.conf
+
+# PHP-FPM config
+RUN echo "[www]" > /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "pm = dynamic" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "pm.max_children = 20" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "pm.start_servers = 4" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "pm.min_spare_servers = 2" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "pm.max_spare_servers = 6" >> /usr/local/etc/php-fpm.d/zz-docker.conf
+
+# OPcache config
+RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.memory_consumption=128" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.interned_strings_buffer=8" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.max_accelerated_files=10000" >> /usr/local/etc/php/conf.d/opcache.ini \
+    && echo "opcache.validate_timestamps=0" >> /usr/local/etc/php/conf.d/opcache.ini
+
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]

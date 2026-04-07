@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedField;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -29,6 +30,8 @@ class P2pOperation extends Model
             'amount' => 'decimal:8',
             'dollar_quotation' => 'decimal:8',
             'operation_date' => 'date',
+            'wallet_from' => EncryptedField::class,
+            'wallet_to' => EncryptedField::class,
         ];
     }
 

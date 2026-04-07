@@ -23,15 +23,19 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Tron (TRC-20)', 'slug' => 'trc20', 'is_active' => true],
         ], ['slug'], ['name', 'is_active']);
 
-        User::firstOrCreate(
-            ['email' => 'admin@lucastrade.local'],
-            [
-                'name' => 'Julio',
-                'password' => Hash::make('senha123'),
-                'role' => 'admin',
-            ]
-        );
+        $adminEmail = env('ADMIN_EMAIL', 'admin@lucastrade.local');
+        $adminPassword = env('ADMIN_PASSWORD');
 
-        // Seeders de dados de teste removidos
+        if ($adminPassword) {
+            User::firstOrCreate(
+                ['email' => $adminEmail],
+                [
+                    'name' => env('ADMIN_NAME', 'Admin'),
+                    'password' => Hash::make($adminPassword),
+                    'role' => 'admin',
+                    'must_change_password' => true,
+                ]
+            );
+        }
     }
 }

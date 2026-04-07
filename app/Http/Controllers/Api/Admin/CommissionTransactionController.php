@@ -16,7 +16,8 @@ class CommissionTransactionController extends Controller
             $query->where('collaborator_id', $request->collaborator_id);
         }
 
-        return $query->orderByDesc('paid_at')->paginate($request->input('per_page', 15));
+        $perPage = min((int) $request->input('per_page', 15), 100);
+        return $query->orderByDesc('paid_at')->paginate($perPage);
     }
 
     public function store(Request $request)
