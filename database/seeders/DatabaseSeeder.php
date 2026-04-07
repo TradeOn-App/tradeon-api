@@ -32,11 +32,6 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $this->call([
-            CommissionRuleSeeder::class,
-            ClientSeeder::class,
-            CollaboratorSeeder::class,
-            TransactionSeeder::class,
-        ]);
+        // Seeders de dados de teste removidos
     }
 }
