@@ -27,17 +27,38 @@ class DashboardController extends Controller
             ->with('cashFlowTransaction')
             ->get();
 
-        // Converte USDT para BRL usando a cotação do momento da transação
-        $totalDeposits = $transactions->whereIn('type', ['deposit', 'updated_value', 'contribution'])->sum(function ($t) {
+        // Total de Depósito = soma de todos os aportes (contributions) convertidos para BRL
+        $totalDeposits = $transactions->where('type', 'contribution')->sum(function ($t) {
             $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
             return (float) $t->amount * (float) $quotation;
         });
+
+        // Também soma depósitos iniciais
+        $totalDeposits += $transactions->where('type', 'deposit')->sum(function ($t) {
+            $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
+            return (float) $t->amount * (float) $quotation;
+        });
+
+        // Total de saques convertidos para BRL
         $totalWithdrawals = $transactions->where('type', 'withdrawal')->sum(function ($t) {
             $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
             return (float) $t->amount * (float) $quotation;
         });
-        $balance = $totalDeposits - $totalWithdrawals;
-        $transactionCount = $transactions->count();
+
+        // Saldo = Valor Atualizado mais recente (convertido p/ BRL) - saques
+        $latestUpdatedValue = $transactions->where('type', 'updated_value')
+            ->sortByDesc(function ($t) {
+                return $t->cashFlowTransaction->transaction_date ?? '0000-00-00';
+            })
+            ->first();
+
+        $updatedValueBrl = 0;
+        if ($latestUpdatedValue) {
+            $quotation = $latestUpdatedValue->cashFlowTransaction->quotation_at_transaction ?? 1;
+            $updatedValueBrl = (float) $latestUpdatedValue->amount * (float) $quotation;
+        }
+
+        $balance = $updatedValueBrl - $totalWithdrawals;
 
         $reports = MonthlyReport::where('client_id', $client->id)
             ->orderBy('year')
@@ -57,9 +78,7 @@ class DashboardController extends Controller
         return response()->json([
             'cards' => [
                 'total_deposits' => (float) $totalDeposits,
-                'total_withdrawals' => (float) $totalWithdrawals,
                 'balance' => (float) $balance,
-                'transaction_count' => $transactionCount,
             ],
             'chart' => $chartData,
         ]);

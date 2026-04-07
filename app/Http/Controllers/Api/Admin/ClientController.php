@@ -30,6 +30,7 @@ class ClientController extends Controller
         $request->validate([
             'full_name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6',
             'document' => 'required|string|max:20',
             'phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',
@@ -39,8 +40,9 @@ class ClientController extends Controller
         $user = User::create([
             'name' => $request->full_name,
             'email' => $request->email,
-            'password' => Hash::make('senha123'),
+            'password' => Hash::make($request->password),
             'role' => 'client',
+            'must_change_password' => true,
         ]);
 
         $client = Client::create([
