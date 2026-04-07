@@ -30,10 +30,12 @@ class CollaboratorController extends Controller
             'name' => 'required|string|max:255',
             'cpf' => 'required|string|max:14|unique:collaborators,cpf',
             'wallet' => 'nullable|string|max:255',
+            'commission' => 'nullable|numeric|min:0|max:100',
+            'fixed' => 'nullable|numeric|min:0',
             'commission_rule_id' => 'nullable|exists:commission_rules,id',
         ]);
 
-        $collaborator = Collaborator::create($request->only('name', 'cpf', 'wallet', 'commission_rule_id'));
+        $collaborator = Collaborator::create($request->only('name', 'cpf', 'wallet', 'commission', 'fixed', 'commission_rule_id'));
 
         return response()->json($collaborator->load('commissionRule'), 201);
     }
@@ -49,11 +51,13 @@ class CollaboratorController extends Controller
             'name' => 'sometimes|string|max:255',
             'cpf' => 'sometimes|string|max:14|unique:collaborators,cpf,' . $collaborator->id,
             'wallet' => 'nullable|string|max:255',
+            'commission' => 'nullable|numeric|min:0|max:100',
+            'fixed' => 'nullable|numeric|min:0',
             'commission_rule_id' => 'nullable|exists:commission_rules,id',
             'is_active' => 'sometimes|boolean',
         ]);
 
-        $collaborator->update($request->only('name', 'cpf', 'wallet', 'commission_rule_id', 'is_active'));
+        $collaborator->update($request->only('name', 'cpf', 'wallet', 'commission', 'fixed', 'commission_rule_id', 'is_active'));
 
         return $collaborator->load('commissionRule');
     }

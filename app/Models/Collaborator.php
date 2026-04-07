@@ -10,13 +10,22 @@ class Collaborator extends Model
         'name',
         'cpf',
         'wallet',
+        'commission',
+        'fixed',
         'commission_rule_id',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'commission' => 'decimal:4',
+        'fixed' => 'decimal:8',
     ];
+
+    public function internalTransactions()
+    {
+        return $this->hasMany(\App\Models\InternalTransaction::class);
+    }
 
     public function commissionRule()
     {

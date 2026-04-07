@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\Admin\CollaboratorController;
 use App\Http\Controllers\Api\Admin\CommissionRuleController;
 use App\Http\Controllers\Api\Admin\ClientTransactionController;
 use App\Http\Controllers\Api\Admin\CommissionTransactionController;
+use App\Http\Controllers\Api\Admin\InternalTransactionController;
+use App\Http\Controllers\Api\Admin\InternalReportController;
 use App\Http\Controllers\Api\Admin\ReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +36,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('commission-rules', CommissionRuleController::class);
         Route::apiResource('client-transactions', ClientTransactionController::class);
         Route::apiResource('commission-transactions', CommissionTransactionController::class);
+        Route::apiResource('internal-transactions', InternalTransactionController::class);
 
         Route::apiResource('cash-flow', CashFlowController::class);
         Route::get('currencies', fn () => \App\Models\Currency::orderBy('code')->get());
@@ -44,6 +47,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('reports/generate', [ReportController::class, 'generate']);
         Route::get('reports/{report}', [ReportController::class, 'show']);
         Route::get('reports/{report}/pdf', [ReportController::class, 'pdf']);
+        Route::post('reports/batch-pdf', [ReportController::class, 'batchPdf']);
+        Route::post('reports/{report}/publish', [ReportController::class, 'publish']);
         Route::delete('reports/{report}', [ReportController::class, 'destroy']);
+
+        Route::get('internal-reports', [InternalReportController::class, 'index']);
+        Route::post('internal-reports/generate', [InternalReportController::class, 'generate']);
+        Route::post('internal-reports/batch-pdf', [InternalReportController::class, 'batchPdf']);
+        Route::delete('internal-reports/{internalReport}', [InternalReportController::class, 'destroy']);
     });
 });

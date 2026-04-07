@@ -15,12 +15,16 @@ class Client extends Model
         'document',
         'phone',
         'notes',
+        'commission',
         'is_active',
     ];
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return [
+            'is_active' => 'boolean',
+            'commission' => 'decimal:4',
+        ];
     }
 
     public function user(): BelongsTo

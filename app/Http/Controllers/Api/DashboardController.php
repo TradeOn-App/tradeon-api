@@ -23,10 +23,19 @@ class DashboardController extends Controller
             return response()->json(['error' => 'Client not found'], 404);
         }
 
-        $transactions = ClientTransaction::where('client_id', $client->id)->get();
+        $transactions = ClientTransaction::where('client_id', $client->id)
+            ->with('cashFlowTransaction')
+            ->get();
 
-        $totalDeposits = $transactions->where('type', 'deposit')->sum('amount');
-        $totalWithdrawals = $transactions->where('type', 'withdrawal')->sum('amount');
+        // Converte USDT para BRL usando a cotação do momento da transação
+        $totalDeposits = $transactions->whereIn('type', ['deposit', 'updated_value', 'contribution'])->sum(function ($t) {
+            $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
+            return (float) $t->amount * (float) $quotation;
+        });
+        $totalWithdrawals = $transactions->where('type', 'withdrawal')->sum(function ($t) {
+            $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
+            return (float) $t->amount * (float) $quotation;
+        });
         $balance = $totalDeposits - $totalWithdrawals;
         $transactionCount = $transactions->count();
 
@@ -74,7 +83,7 @@ class DashboardController extends Controller
             });
         }
 
-        $totalDeposits = (clone $ctQuery)->where('type', 'deposit')->sum('amount');
+        $totalDeposits = (clone $ctQuery)->whereIn('type', ['deposit', 'updated_value', 'contribution'])->sum('amount');
         $totalWithdrawals = (clone $ctQuery)->where('type', 'withdrawal')->sum('amount');
 
         // Clients count

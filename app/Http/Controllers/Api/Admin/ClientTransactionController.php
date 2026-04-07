@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CashFlowTransaction;
 use App\Models\ClientTransaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ClientTransactionController extends Controller
 {
@@ -28,15 +29,19 @@ class ClientTransactionController extends Controller
     {
         $request->validate([
             'client_id' => 'required|exists:clients,id',
-            'type' => 'required|in:deposit,withdrawal,allocation',
+            'type' => 'required|in:deposit,withdrawal,updated_value,contribution',
             'amount' => 'required|numeric|min:0.01',
             'currency_id' => 'required|exists:currencies,id',
             'network_id' => 'required|exists:networks,id',
             'description' => 'nullable|string',
             'transaction_date' => 'required|date',
+            'initial_debit' => 'nullable|numeric|min:0',
+            'reference_month' => 'nullable|integer|between:1,12',
+            'reference_year' => 'nullable|integer|min:2020',
+            'receipt' => 'nullable|image|max:5120',
         ]);
 
-        $cfType = $request->type === 'deposit' ? 'entry' : 'exit';
+        $cfType = in_array($request->type, ['deposit', 'updated_value', 'contribution']) ? 'entry' : 'exit';
 
         $cf = CashFlowTransaction::create([
             'type' => $cfType,
@@ -52,11 +57,20 @@ class ClientTransactionController extends Controller
             'created_by' => $request->user()->id,
         ]);
 
+        $receiptPath = null;
+        if ($request->hasFile('receipt')) {
+            $receiptPath = $request->file('receipt')->store('receipts', 'public');
+        }
+
         $ct = ClientTransaction::create([
             'client_id' => $request->client_id,
             'cash_flow_transaction_id' => $cf->id,
             'type' => $request->type,
             'amount' => $request->amount,
+            'initial_debit' => $request->input('initial_debit', 0),
+            'reference_month' => $request->input('reference_month'),
+            'reference_year' => $request->input('reference_year'),
+            'receipt_path' => $receiptPath,
         ]);
 
         return response()->json($ct->load(['client', 'cashFlowTransaction.currency']), 201);
@@ -71,17 +85,30 @@ class ClientTransactionController extends Controller
     {
         $request->validate([
             'amount' => 'sometimes|numeric|min:0.01',
+            'initial_debit' => 'nullable|numeric|min:0',
+            'reference_month' => 'nullable|integer|between:1,12',
+            'reference_year' => 'nullable|integer|min:2020',
+            'description' => 'nullable|string',
+            'quotation' => 'nullable|numeric',
             'notes' => 'nullable|string',
         ]);
 
-        if ($request->filled('amount')) {
-            $clientTransaction->update(['amount' => $request->amount]);
-            $clientTransaction->cashFlowTransaction->update(['amount' => $request->amount]);
-        }
+        $ctFields = [];
+        $cfFields = [];
 
-        if ($request->has('notes')) {
-            $clientTransaction->update(['notes' => $request->notes]);
+        if ($request->filled('amount')) {
+            $ctFields['amount'] = $request->amount;
+            $cfFields['amount'] = $request->amount;
         }
+        if ($request->has('initial_debit')) $ctFields['initial_debit'] = $request->input('initial_debit', 0);
+        if ($request->has('reference_month')) $ctFields['reference_month'] = $request->reference_month;
+        if ($request->has('reference_year')) $ctFields['reference_year'] = $request->reference_year;
+        if ($request->has('notes')) $ctFields['notes'] = $request->notes;
+        if ($request->has('description')) $cfFields['description'] = $request->description;
+        if ($request->has('quotation')) $cfFields['quotation_at_transaction'] = $request->quotation;
+
+        if (!empty($ctFields)) $clientTransaction->update($ctFields);
+        if (!empty($cfFields)) $clientTransaction->cashFlowTransaction->update($cfFields);
 
         return $clientTransaction->load(['client', 'cashFlowTransaction.currency']);
     }

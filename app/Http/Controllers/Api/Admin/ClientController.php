@@ -33,6 +33,7 @@ class ClientController extends Controller
             'document' => 'required|string|max:20',
             'phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',
+            'commission' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $user = User::create([
@@ -48,6 +49,7 @@ class ClientController extends Controller
             'document' => $request->document,
             'phone' => $request->phone,
             'notes' => $request->notes,
+            'commission' => $request->commission,
             'is_active' => true,
         ]);
 
@@ -66,10 +68,11 @@ class ClientController extends Controller
             'document' => 'sometimes|string|max:20',
             'phone' => 'nullable|string|max:20',
             'notes' => 'nullable|string',
+            'commission' => 'nullable|numeric|min:0|max:100',
             'is_active' => 'sometimes|boolean',
         ]);
 
-        $client->update($request->only('full_name', 'document', 'phone', 'notes', 'is_active'));
+        $client->update($request->only('full_name', 'document', 'phone', 'notes', 'commission', 'is_active'));
 
         if ($request->filled('full_name')) {
             $client->user->update(['name' => $request->full_name]);

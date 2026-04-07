@@ -18,6 +18,7 @@ class ClientReportController extends Controller
         }
 
         $reports = MonthlyReport::where('client_id', $user->client->id)
+            ->whereNotNull('published_at')
             ->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
             ->get();
@@ -35,10 +36,11 @@ class ClientReportController extends Controller
         $report = MonthlyReport::where('client_id', $user->client->id)
             ->where('year', $year)
             ->where('month', $month)
+            ->whereNotNull('published_at')
             ->first();
 
         if (! $report) {
-            return response()->json(['message' => 'Relatorio nao encontrado'], 404);
+            return response()->json(['message' => 'Relatório não encontrado'], 404);
         }
 
         $transactions = ClientTransaction::where('client_id', $user->client->id)
@@ -68,10 +70,11 @@ class ClientReportController extends Controller
         $report = MonthlyReport::where('client_id', $client->id)
             ->where('year', $year)
             ->where('month', $month)
+            ->whereNotNull('published_at')
             ->first();
 
         if (! $report) {
-            return response()->json(['message' => 'Relatorio nao encontrado'], 404);
+            return response()->json(['message' => 'Relatório não encontrado'], 404);
         }
 
         $transactions = ClientTransaction::where('client_id', $client->id)
@@ -83,7 +86,11 @@ class ClientReportController extends Controller
             ->orderBy('created_at')
             ->get();
 
-        $monthNames = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        $monthNames = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+        $nextMonth = $month == 12 ? 1 : $month + 1;
+        $nextYear = $month == 12 ? $year + 1 : $year;
+        $nextPeriod = ($monthNames[$nextMonth] ?? $nextMonth) . ' / ' . $nextYear;
 
         $pdf = Pdf::loadView('pdf.report', [
             'report' => $report,
@@ -91,9 +98,10 @@ class ClientReportController extends Controller
             'transactions' => $transactions,
             'monthName' => $monthNames[$month] ?? $month,
             'year' => $year,
+            'nextPeriod' => $nextPeriod,
         ]);
 
-        $filename = "relatorio-{$client->full_name}-{$month}-{$year}.pdf";
+        $filename = "Relatorio {$client->full_name} - {$month}-{$year}.pdf";
 
         return $pdf->download($filename);
     }
