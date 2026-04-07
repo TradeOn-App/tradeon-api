@@ -72,12 +72,25 @@ class ClientController extends Controller
             'notes' => 'nullable|string',
             'commission' => 'nullable|numeric|min:0|max:100',
             'is_active' => 'sometimes|boolean',
+            'email' => 'sometimes|email|unique:users,email,' . $client->user_id,
+            'password' => 'sometimes|string|min:6',
         ]);
 
         $client->update($request->only('full_name', 'document', 'phone', 'notes', 'commission', 'is_active'));
 
         if ($request->filled('full_name')) {
             $client->user->update(['name' => $request->full_name]);
+        }
+
+        if ($request->filled('email')) {
+            $client->user->update(['email' => $request->email]);
+        }
+
+        if ($request->filled('password')) {
+            $client->user->update([
+                'password' => Hash::make($request->password),
+                'must_change_password' => true,
+            ]);
         }
 
         return $client->load('user');

@@ -37,9 +37,7 @@ return new class extends Migration
             $table->index('created_at');
         });
 
-        Schema::table('internal_reports', function (Blueprint $table) {
-            $table->unique(['collaborator_id', 'month', 'year']);
-        });
+        // unique constraint já existe nesta tabela, não duplicar
     }
 
     public function down(): void
@@ -72,8 +70,6 @@ return new class extends Migration
             $table->dropIndex(['created_at']);
         });
 
-        Schema::table('internal_reports', function (Blueprint $table) {
-            $table->dropUnique(['collaborator_id', 'month', 'year']);
-        });
+        // nada a reverter em internal_reports
     }
 };
