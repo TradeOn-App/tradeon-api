@@ -236,8 +236,8 @@
             </div>
             <div class="client-info-right">
                 <div class="client-profit-label">Lucro</div>
-                <div class="client-profit-value {{ $report->profit_value > 0 ? 'color-teal' : 'color-gray' }}">
-                    R$ {{ number_format($report->profit_value, 2, ',', '.') }}
+                <div class="client-profit-value {{ $report->profit_value_brl > 0 ? 'color-teal' : 'color-gray' }}">
+                    R$ {{ number_format($report->profit_value_brl, 2, ',', '.') }}
                 </div>
             </div>
         </div>
@@ -246,16 +246,16 @@
         <div class="metrics">
             <div class="metric-box">
                 <div class="label">Valor Inicial</div>
-                <div class="value color-teal">R$ {{ number_format($report->initial_value, 2, ',', '.') }}</div>
+                <div class="value color-teal">R$ {{ number_format($report->initial_value_brl, 2, ',', '.') }}</div>
             </div>
             <div class="metric-box">
                 <div class="label">Valor Atualizado</div>
-                <div class="value">R$ {{ number_format($report->updated_value, 2, ',', '.') }}</div>
+                <div class="value">R$ {{ number_format($report->updated_value_brl, 2, ',', '.') }}</div>
             </div>
             <div class="metric-box">
                 <div class="label">Ganho Real</div>
-                <div class="value {{ $report->real_gain >= 0 ? 'color-teal' : 'color-red' }}">
-                    R$ {{ number_format($report->real_gain, 2, ',', '.') }}
+                <div class="value {{ $report->real_gain_brl >= 0 ? 'color-teal' : 'color-red' }}">
+                    R$ {{ number_format($report->real_gain_brl, 2, ',', '.') }}
                 </div>
             </div>
             <div class="metric-box">
@@ -270,11 +270,11 @@
         <div class="summary-row">
             <div class="summary-box">
                 <div class="label">Comissão ({{ number_format($report->commission_rate, 1, ',', '.') }}%)</div>
-                <div class="value color-gold">R$ {{ number_format($report->commission_value, 2, ',', '.') }}</div>
+                <div class="value color-gold">R$ {{ number_format($report->commission_value_brl, 2, ',', '.') }}</div>
             </div>
             <div class="summary-box">
                 <div class="label">Valor Inicial {{ $nextPeriod }}</div>
-                <div class="value color-teal">R$ {{ number_format($report->next_month_initial, 2, ',', '.') }}</div>
+                <div class="value color-teal">R$ {{ number_format($report->next_month_initial_brl, 2, ',', '.') }}</div>
             </div>
         </div>
 

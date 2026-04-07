@@ -33,12 +33,6 @@ class DashboardController extends Controller
             return (float) $t->amount * (float) $quotation;
         });
 
-        // Também soma depósitos iniciais
-        $totalDeposits += $transactions->where('type', 'deposit')->sum(function ($t) {
-            $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
-            return (float) $t->amount * (float) $quotation;
-        });
-
         // Total de saques convertidos para BRL
         $totalWithdrawals = $transactions->where('type', 'withdrawal')->sum(function ($t) {
             $quotation = $t->cashFlowTransaction->quotation_at_transaction ?? 1;
@@ -89,9 +83,10 @@ class DashboardController extends Controller
         $clientId = $request->get('client_id');
         $from = $request->get('from');
         $to = $request->get('to');
+        $currency = $request->get('currency', 'USDT'); // USDT ou BRL
 
         // Client transactions query with optional filters
-        $ctQuery = ClientTransaction::query();
+        $ctQuery = ClientTransaction::query()->with('cashFlowTransaction');
         if ($clientId) {
             $ctQuery->where('client_id', $clientId);
         }
@@ -102,8 +97,24 @@ class DashboardController extends Controller
             });
         }
 
-        $totalDeposits = (clone $ctQuery)->whereIn('type', ['deposit', 'updated_value', 'contribution'])->sum('amount');
-        $totalWithdrawals = (clone $ctQuery)->where('type', 'withdrawal')->sum('amount');
+        $isBrl = strtoupper($currency) === 'BRL';
+
+        if ($isBrl) {
+            $depositTransactions = (clone $ctQuery)->whereIn('type', ['deposit', 'updated_value', 'contribution'])->get();
+            $totalDeposits = $depositTransactions->sum(function ($t) {
+                $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+                return (float) $t->amount * $quotation;
+            });
+
+            $withdrawalTransactions = (clone $ctQuery)->where('type', 'withdrawal')->get();
+            $totalWithdrawals = $withdrawalTransactions->sum(function ($t) {
+                $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+                return (float) $t->amount * $quotation;
+            });
+        } else {
+            $totalDeposits = (clone $ctQuery)->whereIn('type', ['deposit', 'updated_value', 'contribution'])->sum('amount');
+            $totalWithdrawals = (clone $ctQuery)->where('type', 'withdrawal')->sum('amount');
+        }
 
         // Clients count
         $totalClients = Client::where('is_active', true)->count();
@@ -116,14 +127,22 @@ class DashboardController extends Controller
         $p2pCount = (clone $p2pQuery)->count();
 
         // Commissions with date filter
-        $commQuery = CommissionTransaction::query();
+        $commQuery = CommissionTransaction::query()->with('cashFlowTransaction');
         if ($from || $to) {
             $commQuery->whereHas('cashFlowTransaction', function ($q) use ($from, $to) {
                 if ($from) $q->where('transaction_date', '>=', $from);
                 if ($to) $q->where('transaction_date', '<=', $to);
             });
         }
-        $totalCommissions = $commQuery->sum('amount');
+        if ($isBrl) {
+            $commTransactions = $commQuery->get();
+            $totalCommissions = $commTransactions->sum(function ($t) {
+                $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+                return (float) $t->amount * $quotation;
+            });
+        } else {
+            $totalCommissions = $commQuery->sum('amount');
+        }
 
         // Cash flow with date filter
         $cfEntryQuery = CashFlowTransaction::where('type', 'entry');
@@ -136,8 +155,17 @@ class DashboardController extends Controller
             $cfEntryQuery->where('transaction_date', '<=', $to);
             $cfExitQuery->where('transaction_date', '<=', $to);
         }
-        $cashFlowEntries = $cfEntryQuery->sum('amount');
-        $cashFlowExits = $cfExitQuery->sum('amount');
+        if ($isBrl) {
+            $cashFlowEntries = (clone $cfEntryQuery)->get()->sum(function ($t) {
+                return (float) $t->amount * (float) ($t->quotation_at_transaction ?? 1);
+            });
+            $cashFlowExits = (clone $cfExitQuery)->get()->sum(function ($t) {
+                return (float) $t->amount * (float) ($t->quotation_at_transaction ?? 1);
+            });
+        } else {
+            $cashFlowEntries = $cfEntryQuery->sum('amount');
+            $cashFlowExits = $cfExitQuery->sum('amount');
+        }
 
         // Profit: from monthly reports
         $reportQuery = MonthlyReport::query();
@@ -163,20 +191,28 @@ class DashboardController extends Controller
             });
         }
         $profitReports = $reportQuery->get();
-        $totalProfit = $profitReports->sum(function ($r) {
-            return (float) $r->total_deposits - (float) $r->total_withdrawals;
-        });
+        if ($isBrl) {
+            $totalProfit = $profitReports->sum(function ($r) {
+                return (float) $r->total_deposits_brl - (float) $r->total_withdrawals_brl;
+            });
+        } else {
+            $totalProfit = $profitReports->sum(function ($r) {
+                return (float) $r->total_deposits - (float) $r->total_withdrawals;
+            });
+        }
         $avgProfitability = $profitReports->count() > 0
             ? round($profitReports->avg('profitability_percent'), 2)
             : 0;
 
         // Chart data - monthly reports
+        $depositsCol = $isBrl ? 'total_deposits_brl' : 'total_deposits';
+        $withdrawalsCol = $isBrl ? 'total_withdrawals_brl' : 'total_withdrawals';
         $monthlyQuery = DB::table('monthly_reports')
             ->select(
                 'year',
                 'month',
-                DB::raw('SUM(total_deposits) as deposits'),
-                DB::raw('SUM(total_withdrawals) as withdrawals'),
+                DB::raw("SUM({$depositsCol}) as deposits"),
+                DB::raw("SUM({$withdrawalsCol}) as withdrawals"),
                 DB::raw('AVG(profitability_percent) as avg_profitability')
             );
         if ($clientId) {
@@ -234,6 +270,7 @@ class DashboardController extends Controller
                 'total_profit' => (float) $totalProfit,
                 'avg_profitability' => $avgProfitability,
             ],
+            'currency' => $currency,
             'chart' => $monthlyData,
             'p2p_chart' => $p2pMonthly,
         ]);

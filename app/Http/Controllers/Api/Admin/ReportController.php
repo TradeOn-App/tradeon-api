@@ -38,21 +38,32 @@ class ReportController extends Controller
         $month = (int) $request->month;
         $year = (int) $request->year;
 
-        // Transações do período (valor inicial e saques)
+        // Transações do período com cashFlowTransaction para cotação
         $transactions = ClientTransaction::where('client_id', $client->id)
             ->whereHas('cashFlowTransaction', function ($q) use ($month, $year) {
                 $q->whereMonth('transaction_date', $month)
                   ->whereYear('transaction_date', $year);
             })
+            ->with('cashFlowTransaction')
             ->get();
 
-        // Valor Inicial (deposit) + Aportes (contribution) no período
+        // Valor Inicial (deposit) + Aportes (contribution) no período — em USDT
         $depositValue = (float) $transactions->where('type', 'deposit')->sum('amount');
         $contributions = (float) $transactions->where('type', 'contribution')->sum('amount');
         $initialValue = $depositValue + $contributions;
 
-        // Saques no período
+        // Valor Inicial em BRL (cada transação convertida pela cotação do dia)
+        $initialValueBrl = $transactions->whereIn('type', ['deposit', 'contribution'])->sum(function ($t) {
+            $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+            return (float) $t->amount * $quotation;
+        });
+
+        // Saques no período — USDT e BRL
         $withdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
+        $withdrawalsBrl = $transactions->where('type', 'withdrawal')->sum(function ($t) {
+            $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+            return (float) $t->amount * $quotation;
+        });
 
         // Valor Atualizado = o mais recente que referencia este mês/ano
         $nextMonth = $month === 12 ? 1 : $month + 1;
@@ -62,34 +73,49 @@ class ReportController extends Controller
             ->where('type', 'updated_value')
             ->where('reference_month', $month)
             ->where('reference_year', $year)
+            ->with('cashFlowTransaction')
             ->orderByDesc('created_at')
             ->first();
 
         $updatedValue = $latestUpdated ? (float) $latestUpdated->amount : 0;
+        $updatedValueBrl = 0;
+        if ($latestUpdated) {
+            $quotation = (float) ($latestUpdated->cashFlowTransaction->quotation_at_transaction ?? 1);
+            $updatedValueBrl = $updatedValue * $quotation;
+        }
 
         // Débito inicial = soma dos initial_debit das transações deposit do período
         $initialDebit = (float) $transactions->where('type', 'deposit')->sum('initial_debit');
 
-        // Cálculos
+        // Cálculos em USDT
         $realGain = $updatedValue - $initialValue;
         $gainPercentage = $initialValue > 0 ? round(($realGain / $initialValue) * 100, 4) : 0;
+
+        // Cálculos em BRL
+        $realGainBrl = $updatedValueBrl - $initialValueBrl;
 
         // Comissão do cliente
         $commissionRate = (float) ($client->commission ?? 0);
 
         if ($realGain > 0) {
-            // Cenário de ganho: comissão sobre (ganho real - débito inicial)
             $commissionBase = $realGain - $initialDebit;
             $commissionValue = $commissionBase > 0 ? round(($commissionRate / 100) * $commissionBase, 8) : 0;
             $profitValue = $realGain - $commissionValue;
+
+            // BRL: comissão proporcional
+            $commissionBaseBrl = $realGainBrl - ($initialDebit > 0 && $initialValue > 0 ? ($initialDebit / $initialValue) * $initialValueBrl : 0);
+            $commissionValueBrl = $commissionBaseBrl > 0 ? round(($commissionRate / 100) * $commissionBaseBrl, 8) : 0;
+            $profitValueBrl = $realGainBrl - $commissionValueBrl;
         } else {
-            // Cenário de perda: comissão e lucro zerados
             $commissionValue = 0;
             $profitValue = 0;
+            $commissionValueBrl = 0;
+            $profitValueBrl = 0;
         }
 
-        // Valor inicial mês subsequente = Valor Atualizado - Saques
-        $nextMonthInitial = $updatedValue - $withdrawals;
+        // Valor inicial mês subsequente = Valor Atualizado - Comissão - Saques
+        $nextMonthInitial = $updatedValue - $commissionValue - $withdrawals;
+        $nextMonthInitialBrl = $updatedValueBrl - $commissionValueBrl - $withdrawalsBrl;
 
         $report = MonthlyReport::updateOrCreate(
             [
@@ -110,6 +136,15 @@ class ReportController extends Controller
                 'commission_value' => $commissionValue,
                 'profit_value' => $profitValue,
                 'next_month_initial' => $nextMonthInitial,
+                // Valores em BRL
+                'initial_value_brl' => $initialValueBrl,
+                'updated_value_brl' => $updatedValueBrl,
+                'real_gain_brl' => $realGainBrl,
+                'total_deposits_brl' => $initialValueBrl,
+                'total_withdrawals_brl' => $withdrawalsBrl,
+                'commission_value_brl' => $commissionValueBrl,
+                'profit_value_brl' => $profitValueBrl,
+                'next_month_initial_brl' => $nextMonthInitialBrl,
                 'summary' => [
                     'transactions_count' => $transactions->count(),
                     'next_month' => sprintf('%02d/%d', $nextMonth, $nextYear),

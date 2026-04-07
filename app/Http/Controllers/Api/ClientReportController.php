@@ -21,7 +21,19 @@ class ClientReportController extends Controller
             ->whereNotNull('published_at')
             ->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
-            ->get();
+            ->get()
+            ->map(function ($r) {
+                return array_merge($r->toArray(), [
+                    'initial_value' => $r->initial_value_brl,
+                    'updated_value' => $r->updated_value_brl,
+                    'real_gain' => $r->real_gain_brl,
+                    'commission_value' => $r->commission_value_brl,
+                    'profit_value' => $r->profit_value_brl,
+                    'next_month_initial' => $r->next_month_initial_brl,
+                    'total_deposits' => $r->total_deposits_brl,
+                    'total_withdrawals' => $r->total_withdrawals_brl,
+                ]);
+            });
 
         return response()->json($reports);
     }
@@ -43,6 +55,18 @@ class ClientReportController extends Controller
             return response()->json(['message' => 'Relatório não encontrado'], 404);
         }
 
+        // Retornar valores em BRL para o cliente
+        $reportData = array_merge($report->toArray(), [
+            'initial_value' => $report->initial_value_brl,
+            'updated_value' => $report->updated_value_brl,
+            'real_gain' => $report->real_gain_brl,
+            'commission_value' => $report->commission_value_brl,
+            'profit_value' => $report->profit_value_brl,
+            'next_month_initial' => $report->next_month_initial_brl,
+            'total_deposits' => $report->total_deposits_brl,
+            'total_withdrawals' => $report->total_withdrawals_brl,
+        ]);
+
         $transactions = ClientTransaction::where('client_id', $user->client->id)
             ->whereHas('cashFlowTransaction', function ($q) use ($year, $month) {
                 $q->whereYear('transaction_date', $year)
@@ -53,7 +77,7 @@ class ClientReportController extends Controller
             ->get();
 
         return response()->json([
-            'report' => $report,
+            'report' => $reportData,
             'transactions' => $transactions,
         ]);
     }
