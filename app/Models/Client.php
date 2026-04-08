@@ -15,6 +15,7 @@ class Client extends Model
         'full_name',
         'document',
         'phone',
+        'access_password',
         'notes',
         'commission',
         'is_active',
@@ -27,6 +28,7 @@ class Client extends Model
             'commission' => 'decimal:4',
             'document' => EncryptedField::class,
             'phone' => EncryptedField::class,
+            'access_password' => EncryptedField::class,
         ];
     }
 

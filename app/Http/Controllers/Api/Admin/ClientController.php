@@ -50,6 +50,7 @@ class ClientController extends Controller
             'full_name' => $request->full_name,
             'document' => $request->document,
             'phone' => $request->phone,
+            'access_password' => $request->password,
             'notes' => $request->notes,
             'commission' => $request->commission,
             'is_active' => true,
@@ -73,7 +74,7 @@ class ClientController extends Controller
             'commission' => 'nullable|numeric|min:0|max:100',
             'is_active' => 'sometimes|boolean',
             'email' => 'sometimes|email|unique:users,email,' . $client->user_id,
-            'password' => 'sometimes|string|min:6',
+            'password' => 'sometimes|string|min:12',
         ]);
 
         $client->update($request->only('full_name', 'document', 'phone', 'notes', 'commission', 'is_active'));
@@ -91,6 +92,7 @@ class ClientController extends Controller
                 'password' => Hash::make($request->password),
                 'must_change_password' => true,
             ]);
+            $client->update(['access_password' => $request->password]);
         }
 
         return $client->load('user');
