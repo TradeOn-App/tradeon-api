@@ -17,26 +17,26 @@ class ClientReportController extends Controller
             return response()->json(['message' => 'Cliente nao encontrado'], 404);
         }
 
-        $paginated = MonthlyReport::where('client_id', $user->client->id)
+        $reports = MonthlyReport::where('client_id', $user->client->id)
             ->whereNotNull('published_at')
             ->orderBy('year', 'desc')
             ->orderBy('month', 'desc')
-            ->paginate($request->input('per_page', 15));
+            ->limit(120)
+            ->get()
+            ->map(function ($r) {
+                return array_merge($r->toArray(), [
+                    'initial_value' => $r->initial_value_brl,
+                    'updated_value' => $r->updated_value_brl,
+                    'real_gain' => $r->real_gain_brl,
+                    'commission_value' => $r->commission_value_brl,
+                    'profit_value' => $r->profit_value_brl,
+                    'next_month_initial' => $r->next_month_initial_brl,
+                    'total_deposits' => $r->total_deposits_brl,
+                    'total_withdrawals' => $r->total_withdrawals_brl,
+                ]);
+            });
 
-        $paginated->getCollection()->transform(function ($r) {
-            return array_merge($r->toArray(), [
-                'initial_value' => $r->initial_value_brl,
-                'updated_value' => $r->updated_value_brl,
-                'real_gain' => $r->real_gain_brl,
-                'commission_value' => $r->commission_value_brl,
-                'profit_value' => $r->profit_value_brl,
-                'next_month_initial' => $r->next_month_initial_brl,
-                'total_deposits' => $r->total_deposits_brl,
-                'total_withdrawals' => $r->total_withdrawals_brl,
-            ]);
-        });
-
-        return response()->json($paginated);
+        return response()->json($reports);
     }
 
     public function show(Request $request, int $year, int $month)
