@@ -34,19 +34,41 @@ class InternalReportController extends Controller
         $month = (int) $request->month;
         $year = (int) $request->year;
 
+        // Transações do mês
         $transactions = InternalTransaction::where('collaborator_id', $collaborator->id)
             ->whereMonth('transaction_date', $month)
             ->whereYear('transaction_date', $year)
             ->get();
 
-        // Valor Inicial = apenas transações do tipo initial_value (SEM somar aportes)
+        // Valor Inicial = apenas transações do tipo initial_value
         $initialValue = (float) $transactions->where('type', 'initial_value')->sum('amount');
 
-        // Aportes (deposits) separados
+        // Aportes do mês
         $deposits = (float) $transactions->where('type', 'deposit')->sum('amount');
 
-        // Capital operado no mês = Valor Inicial + Aportes
-        $operatingCapital = $initialValue + $deposits;
+        // Detectar restart: se houve saque >= saldo do mês anterior + depósito no mesmo mês
+        // Nesse caso o deposit é informativo (mesmo dinheiro do initial_value)
+        $prevMonth = $month === 1 ? 12 : $month - 1;
+        $prevYear = $month === 1 ? $year - 1 : $year;
+        $prevReport = InternalReport::where('collaborator_id', $collaborator->id)
+            ->where('month', $prevMonth)
+            ->where('year', $prevYear)
+            ->first();
+
+        $withdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
+        $commissionWithdrawals = (float) $transactions->where('type', 'commission_withdrawal')->sum('amount');
+        $clientWithdrawals = (float) $transactions->where('type', 'client_withdrawal')->sum('amount');
+        $totalSaques = $withdrawals + $commissionWithdrawals + $clientWithdrawals;
+
+        // Restart = saque total (>= saldo anterior) + novo depósito + initial_value no mesmo mês
+        $isRestart = $prevReport
+            && $totalSaques >= (float) $prevReport->next_month_initial
+            && $deposits > 0
+            && $initialValue > 0;
+
+        // Capital operado: se é restart, deposit é informativo (já contido no initial_value)
+        // Se não é restart, deposit é dinheiro novo adicionado ao initial_value
+        $operatingCapital = $isRestart ? $initialValue : ($initialValue + $deposits);
 
         // Valor Atualizado = mais recente do tipo updated_value
         $latestUpdated = InternalTransaction::where('collaborator_id', $collaborator->id)
@@ -57,52 +79,86 @@ class InternalReportController extends Controller
             ->first();
         $updatedValue = $latestUpdated ? (float) $latestUpdated->amount : 0;
 
-        $withdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
-        $commissionWithdrawals = (float) $transactions->where('type', 'commission_withdrawal')->sum('amount');
-        $clientWithdrawals = (float) $transactions->where('type', 'client_withdrawal')->sum('amount');
-        $totalSaques = $withdrawals + $commissionWithdrawals + $clientWithdrawals;
-
         // Lucro do mês = Valor Atualizado - Capital Operado
-        // Se não há updated_value, lucro = 0 (mês sem fechamento)
         if ($updatedValue > 0) {
             $profit = $updatedValue - $operatingCapital;
         } else {
-            // Sem valor atualizado: considerar que o capital ficou intacto
             $profit = 0;
         }
 
         $profitPercentage = $operatingCapital > 0 ? round(($profit / $operatingCapital) * 100, 4) : 0;
 
-        // Comissão = % do colaborador sobre o lucro (só se lucro positivo)
+        // --- Débito acumulado ---
+        $previousDebt = $prevReport ? (float) ($prevReport->accumulated_debt ?? 0) : 0;
+
+        // Comissão = % do colaborador sobre (lucro - débito acumulado)
         $commissionRate = (float) ($collaborator->commission ?? 0);
-        $commissionValue = $profit > 0 ? round(($commissionRate / 100) * $profit, 8) : 0;
+        $accumulatedDebt = 0;
+        $commissionValue = 0;
 
-        // Valor inicial mês subsequente:
-        // Se há updated_value: Atualizado - saques
-        // Se não há updated_value: Capital Operado - saques
+        if ($profit > 0) {
+            $commissionBase = $profit - $previousDebt;
+            if ($commissionBase > 0) {
+                // Lucro cobriu o débito, cobrar comissão sobre o excedente
+                $commissionValue = round(($commissionRate / 100) * $commissionBase, 8);
+                $accumulatedDebt = 0; // Débito quitado
+            } else {
+                // Lucro não cobriu o débito todo, sem comissão
+                $commissionValue = 0;
+                $accumulatedDebt = abs($commissionBase); // Débito restante
+            }
+        } elseif ($profit < 0) {
+            // Prejuízo: acumular como débito para próximos meses
+            $commissionValue = 0;
+            $accumulatedDebt = $previousDebt + abs($profit);
+        } else {
+            // Lucro zero: manter débito anterior
+            $commissionValue = 0;
+            $accumulatedDebt = $previousDebt;
+        }
+
+        // Se é restart, zerar o débito acumulado (é um recomeço)
+        if ($isRestart) {
+            $accumulatedDebt = 0;
+            $previousDebt = 0;
+
+            // Recalcular comissão sem débito anterior
+            if ($profit > 0) {
+                $commissionValue = round(($commissionRate / 100) * $profit, 8);
+            }
+        }
+
+        // Próximo mês = Valor Atualizado - Comissão - Saques (do mês, excluindo saques do restart)
         $baseForNext = $updatedValue > 0 ? $updatedValue : $operatingCapital;
-        $nextMonthInitial = max($baseForNext - $totalSaques, 0);
-
-        // Se o lucro foi negativo (prejuízo), descontar do próximo mês
-        if ($profit < 0) {
-            $nextMonthInitial = $baseForNext - $totalSaques;
-            // O valor pode ficar negativo se houve prejuízo real
+        if ($isRestart) {
+            // Em restart, o saque é do capital anterior, não do novo
+            // Só descontar saques que ocorreram DEPOIS do re-depósito (se houver)
+            $nextMonthInitial = $baseForNext - $commissionValue;
+        } else {
+            $nextMonthInitial = $baseForNext - $commissionValue - $totalSaques;
         }
 
         $balance = $deposits - $withdrawals - $commissionWithdrawals - $clientWithdrawals;
 
-        // Aportes acumulados históricos (todos os deposits + initial_values até este mês)
-        $cumulativeDeposits = (float) InternalTransaction::where('collaborator_id', $collaborator->id)
+        // Aportes acumulados líquidos (aportes - saques, para L. Total)
+        $totalDepositsHistorical = (float) InternalTransaction::where('collaborator_id', $collaborator->id)
             ->whereIn('type', ['deposit', 'initial_value'])
             ->where(function ($q) use ($year, $month) {
-                $q->where(function ($sub) use ($year, $month) {
-                    $sub->whereYear('transaction_date', '<', $year);
-                })->orWhere(function ($sub) use ($year, $month) {
-                    $sub->whereYear('transaction_date', $year)
-                        ->whereMonth('transaction_date', '<=', $month);
-                });
+                $q->whereYear('transaction_date', '<', $year)
+                  ->orWhere(fn ($sub) => $sub->whereYear('transaction_date', $year)->whereMonth('transaction_date', '<=', $month));
             })
             ->sum('amount');
+
+        $totalWithdrawalsHistorical = (float) InternalTransaction::where('collaborator_id', $collaborator->id)
+            ->whereIn('type', ['withdrawal', 'commission_withdrawal', 'client_withdrawal'])
+            ->where(function ($q) use ($year, $month) {
+                $q->whereYear('transaction_date', '<', $year)
+                  ->orWhere(fn ($sub) => $sub->whereYear('transaction_date', $year)->whereMonth('transaction_date', '<=', $month));
+            })
+            ->sum('amount');
+
+        // Aportes líquidos = capital que realmente está investido
+        $cumulativeDeposits = max($totalDepositsHistorical - $totalWithdrawalsHistorical, 0);
 
         $nextMonth = $month === 12 ? 1 : $month + 1;
         $nextYear = $month === 12 ? $year + 1 : $year;
@@ -125,6 +181,7 @@ class InternalReportController extends Controller
                 'profit_percentage' => $profitPercentage,
                 'commission_rate' => $commissionRate,
                 'commission_value' => $commissionValue,
+                'accumulated_debt' => $accumulatedDebt,
                 'next_month_initial' => $nextMonthInitial,
                 'summary' => [
                     'transactions_count' => $transactions->count(),
