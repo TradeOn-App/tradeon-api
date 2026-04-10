@@ -47,13 +47,20 @@ class ReportController extends Controller
             ->with('cashFlowTransaction.currency')
             ->get();
 
-        // Valor Inicial (deposit) + Aportes (contribution) no período — em USDT
+        // Valor Inicial (deposit) — SEM somar aportes
         $depositValue = (float) $transactions->where('type', 'deposit')->sum('amount');
         $contributions = (float) $transactions->where('type', 'contribution')->sum('amount');
-        $initialValue = $depositValue + $contributions;
+        $initialValue = $depositValue; // Apenas deposits, sem contributions
 
-        // Valor Inicial em BRL (cada transação convertida pela cotação do dia)
-        $initialValueBrl = $transactions->whereIn('type', ['deposit', 'contribution'])->sum(function ($t) {
+        // Valor Inicial em BRL
+        $initialValueBrl = $transactions->where('type', 'deposit')->sum(function ($t) {
+            $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
+            return (float) $t->amount * $quotation;
+        });
+
+        // Capital operado = Valor Inicial + Aportes (usado para cálculo de ganho)
+        $operatingCapital = $depositValue + $contributions;
+        $operatingCapitalBrl = $transactions->whereIn('type', ['deposit', 'contribution'])->sum(function ($t) {
             $quotation = (float) ($t->cashFlowTransaction->quotation_at_transaction ?? 1);
             return (float) $t->amount * $quotation;
         });
@@ -87,23 +94,27 @@ class ReportController extends Controller
         // Débito inicial = soma dos initial_debit das transações deposit do período
         $initialDebit = (float) $transactions->where('type', 'deposit')->sum('initial_debit');
 
-        // Cálculos em USDT
-        $realGain = $updatedValue - $initialValue;
-        $gainPercentage = $initialValue > 0 ? round(($realGain / $initialValue) * 100, 4) : 0;
+        // Cálculos em USDT (ganho sobre o capital operado = deposit + contributions)
+        $realGain = $updatedValue - $operatingCapital;
+        $gainPercentage = $operatingCapital > 0 ? round(($realGain / $operatingCapital) * 100, 4) : 0;
 
         // Cálculos em BRL
-        $realGainBrl = $updatedValueBrl - $initialValueBrl;
+        $realGainBrl = $updatedValueBrl - $operatingCapitalBrl;
 
         // Comissão do cliente
         $commissionRate = (float) ($client->commission ?? 0);
 
         if ($realGain > 0) {
+            // Comissão sobre o ganho real menos débito inicial
             $commissionBase = $realGain - $initialDebit;
             $commissionValue = $commissionBase > 0 ? round(($commissionRate / 100) * $commissionBase, 8) : 0;
             $profitValue = $realGain - $commissionValue;
 
             // BRL: comissão proporcional
-            $commissionBaseBrl = $realGainBrl - ($initialDebit > 0 && $initialValue > 0 ? ($initialDebit / $initialValue) * $initialValueBrl : 0);
+            $debitBrl = $initialDebit > 0 && $operatingCapital > 0
+                ? ($initialDebit / $operatingCapital) * $operatingCapitalBrl
+                : 0;
+            $commissionBaseBrl = $realGainBrl - $debitBrl;
             $commissionValueBrl = $commissionBaseBrl > 0 ? round(($commissionRate / 100) * $commissionBaseBrl, 8) : 0;
             $profitValueBrl = $realGainBrl - $commissionValueBrl;
         } else {
@@ -124,10 +135,10 @@ class ReportController extends Controller
                 'year' => $year,
             ],
             [
-                'total_deposits' => $initialValue,
+                'total_deposits' => $operatingCapital,
                 'total_withdrawals' => $withdrawals,
                 'profitability_percent' => $gainPercentage,
-                'initial_value' => $initialValue,
+                'initial_value' => $initialValue, // Só deposits, sem contributions
                 'updated_value' => $updatedValue,
                 'real_gain' => $realGain,
                 'gain_percentage' => $gainPercentage,
@@ -137,10 +148,10 @@ class ReportController extends Controller
                 'profit_value' => $profitValue,
                 'next_month_initial' => $nextMonthInitial,
                 // Valores em BRL
-                'initial_value_brl' => $initialValueBrl,
+                'initial_value_brl' => $initialValueBrl, // Só deposits, sem contributions
                 'updated_value_brl' => $updatedValueBrl,
                 'real_gain_brl' => $realGainBrl,
-                'total_deposits_brl' => $initialValueBrl,
+                'total_deposits_brl' => $operatingCapitalBrl,
                 'total_withdrawals_brl' => $withdrawalsBrl,
                 'commission_value_brl' => $commissionValueBrl,
                 'profit_value_brl' => $profitValueBrl,

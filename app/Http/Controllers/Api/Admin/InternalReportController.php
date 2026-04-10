@@ -39,10 +39,14 @@ class InternalReportController extends Controller
             ->whereYear('transaction_date', $year)
             ->get();
 
-        // Valor Inicial = initial_value + deposit (aportes)
-        $initialValues = (float) $transactions->where('type', 'initial_value')->sum('amount');
+        // Valor Inicial = apenas transações do tipo initial_value (SEM somar aportes)
+        $initialValue = (float) $transactions->where('type', 'initial_value')->sum('amount');
+
+        // Aportes (deposits) separados
         $deposits = (float) $transactions->where('type', 'deposit')->sum('amount');
-        $initialValue = $initialValues + $deposits;
+
+        // Capital operado no mês = Valor Inicial + Aportes
+        $operatingCapital = $initialValue + $deposits;
 
         // Valor Atualizado = mais recente do tipo updated_value
         $latestUpdated = InternalTransaction::where('collaborator_id', $collaborator->id)
@@ -56,19 +60,49 @@ class InternalReportController extends Controller
         $withdrawals = (float) $transactions->where('type', 'withdrawal')->sum('amount');
         $commissionWithdrawals = (float) $transactions->where('type', 'commission_withdrawal')->sum('amount');
         $clientWithdrawals = (float) $transactions->where('type', 'client_withdrawal')->sum('amount');
+        $totalSaques = $withdrawals + $commissionWithdrawals + $clientWithdrawals;
 
-        // Lucro = Valor Atualizado - Valor Inicial
-        $profit = $updatedValue - $initialValue;
-        $profitPercentage = $initialValue > 0 ? round(($profit / $initialValue) * 100, 4) : 0;
+        // Lucro do mês = Valor Atualizado - Capital Operado
+        // Se não há updated_value, lucro = 0 (mês sem fechamento)
+        if ($updatedValue > 0) {
+            $profit = $updatedValue - $operatingCapital;
+        } else {
+            // Sem valor atualizado: considerar que o capital ficou intacto
+            $profit = 0;
+        }
 
-        // Comissão = % do colaborador sobre o lucro
+        $profitPercentage = $operatingCapital > 0 ? round(($profit / $operatingCapital) * 100, 4) : 0;
+
+        // Comissão = % do colaborador sobre o lucro (só se lucro positivo)
         $commissionRate = (float) ($collaborator->commission ?? 0);
         $commissionValue = $profit > 0 ? round(($commissionRate / 100) * $profit, 8) : 0;
 
-        // Valor inicial mês subsequente = Valor Atualizado - Saque Cliente - Saque Comissão - Retirada
-        $nextMonthInitial = $updatedValue - $clientWithdrawals - $commissionWithdrawals - $withdrawals;
+        // Valor inicial mês subsequente:
+        // Se há updated_value: Atualizado - saques
+        // Se não há updated_value: Capital Operado - saques
+        $baseForNext = $updatedValue > 0 ? $updatedValue : $operatingCapital;
+        $nextMonthInitial = max($baseForNext - $totalSaques, 0);
+
+        // Se o lucro foi negativo (prejuízo), descontar do próximo mês
+        if ($profit < 0) {
+            $nextMonthInitial = $baseForNext - $totalSaques;
+            // O valor pode ficar negativo se houve prejuízo real
+        }
 
         $balance = $deposits - $withdrawals - $commissionWithdrawals - $clientWithdrawals;
+
+        // Aportes acumulados históricos (todos os deposits + initial_values até este mês)
+        $cumulativeDeposits = (float) InternalTransaction::where('collaborator_id', $collaborator->id)
+            ->whereIn('type', ['deposit', 'initial_value'])
+            ->where(function ($q) use ($year, $month) {
+                $q->where(function ($sub) use ($year, $month) {
+                    $sub->whereYear('transaction_date', '<', $year);
+                })->orWhere(function ($sub) use ($year, $month) {
+                    $sub->whereYear('transaction_date', $year)
+                        ->whereMonth('transaction_date', '<=', $month);
+                });
+            })
+            ->sum('amount');
 
         $nextMonth = $month === 12 ? 1 : $month + 1;
         $nextYear = $month === 12 ? $year + 1 : $year;
@@ -81,6 +115,7 @@ class InternalReportController extends Controller
             ],
             [
                 'total_deposits' => $deposits,
+                'cumulative_deposits' => $cumulativeDeposits,
                 'total_withdrawals' => $withdrawals,
                 'total_commission_withdrawals' => $commissionWithdrawals,
                 'balance' => $balance,

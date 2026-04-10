@@ -12,6 +12,7 @@ class InternalReport extends Model
         'month',
         'year',
         'total_deposits',
+        'cumulative_deposits',
         'total_withdrawals',
         'total_commission_withdrawals',
         'balance',
@@ -30,6 +31,7 @@ class InternalReport extends Model
     {
         return [
             'total_deposits' => 'decimal:8',
+            'cumulative_deposits' => 'decimal:8',
             'total_withdrawals' => 'decimal:8',
             'total_commission_withdrawals' => 'decimal:8',
             'balance' => 'decimal:8',
