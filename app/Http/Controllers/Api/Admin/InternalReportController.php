@@ -201,6 +201,35 @@ class InternalReportController extends Controller
         return response()->json(['message' => 'Deleted']);
     }
 
+    public function pdf(InternalReport $internalReport)
+    {
+        $collaborator = $internalReport->collaborator;
+        $monthNames = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+        $transactions = InternalTransaction::where('collaborator_id', $collaborator->id)
+            ->whereMonth('transaction_date', $internalReport->month)
+            ->whereYear('transaction_date', $internalReport->year)
+            ->orderBy('created_at')
+            ->get();
+
+        $nextMonth = $internalReport->month === 12 ? 1 : $internalReport->month + 1;
+        $nextYear = $internalReport->month === 12 ? $internalReport->year + 1 : $internalReport->year;
+        $nextPeriod = ($monthNames[$nextMonth] ?? $nextMonth) . ' / ' . $nextYear;
+
+        $pdf = Pdf::loadView('pdf.internal-report', [
+            'report' => $internalReport,
+            'collaborator' => $collaborator,
+            'transactions' => $transactions,
+            'monthName' => $monthNames[$internalReport->month] ?? $internalReport->month,
+            'year' => $internalReport->year,
+            'nextPeriod' => $nextPeriod,
+        ]);
+
+        $filename = "Relatorio Interno {$collaborator->name} - {$internalReport->month}-{$internalReport->year}.pdf";
+
+        return $pdf->download($filename);
+    }
+
     public function batchPdf(Request $request)
     {
         $request->validate([

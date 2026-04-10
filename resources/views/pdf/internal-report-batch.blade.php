@@ -67,7 +67,7 @@
             <div class="totals-row">
                 <div class="totals-cell">
                     <div class="label">Total Valor Atualizado</div>
-                    <div class="value color-teal">R$ {{ number_format($totalUpdatedValue, 2, ',', '.') }}</div>
+                    <div class="value color-teal">US$ {{ number_format($totalUpdatedValue, 2, ',', '.') }}</div>
                 </div>
                 <div class="totals-cell">
                     <div class="label">Média Lucro %</div>
@@ -91,7 +91,7 @@
                         <tr>
                             <td style="font-weight: 600;">{{ $p['collaborator']->name }}</td>
                             <td>{{ $p['monthName'] }} / {{ $p['year'] }}</td>
-                            <td class="amount-positive">R$ {{ number_format($p['report']->updated_value, 2, ',', '.') }}</td>
+                            <td class="amount-positive">US$ {{ number_format($p['report']->updated_value, 2, ',', '.') }}</td>
                             <td style="color: {{ $pct < 0 ? '#8b3a2f' : ($pct < 5 ? '#e0a830' : '#00807f') }}; font-weight: 600;">{{ number_format($pct, 2, ',', '.') }}%</td>
                             <td>
                                 @if($pct < 0)
@@ -149,16 +149,16 @@
                 <div class="metrics">
                     <div class="metric-box">
                         <div class="label">Valor Inicial</div>
-                        <div class="value color-teal">R$ {{ number_format($report->initial_value, 2, ',', '.') }}</div>
+                        <div class="value color-teal">US$ {{ number_format($report->initial_value, 2, ',', '.') }}</div>
                     </div>
                     <div class="metric-box">
                         <div class="label">Valor Atualizado</div>
-                        <div class="value">R$ {{ number_format($report->updated_value, 2, ',', '.') }}</div>
+                        <div class="value">US$ {{ number_format($report->updated_value, 2, ',', '.') }}</div>
                     </div>
                     <div class="metric-box">
                         <div class="label">Lucro</div>
                         <div class="value {{ $report->profit >= 0 ? 'color-teal' : 'color-red' }}">
-                            R$ {{ number_format($report->profit, 2, ',', '.') }}
+                            US$ {{ number_format($report->profit, 2, ',', '.') }}
                         </div>
                     </div>
                     <div class="metric-box">
@@ -172,11 +172,11 @@
                 <div class="summary-row">
                     <div class="summary-box">
                         <div class="label">Comissão ({{ number_format($report->commission_rate, 1, ',', '.') }}%)</div>
-                        <div class="value color-gold">R$ {{ number_format($report->commission_value, 2, ',', '.') }}</div>
+                        <div class="value color-gold">US$ {{ number_format($report->commission_value, 2, ',', '.') }}</div>
                     </div>
                     <div class="summary-box">
                         <div class="label">Valor Inicial {{ $nextPeriod }}</div>
-                        <div class="value color-teal">R$ {{ number_format($report->next_month_initial, 2, ',', '.') }}</div>
+                        <div class="value color-teal">US$ {{ number_format($report->next_month_initial, 2, ',', '.') }}</div>
                     </div>
                 </div>
 
@@ -205,7 +205,7 @@
                                         @endif
                                     </td>
                                     <td class="{{ in_array($t->type, ['initial_value', 'deposit', 'updated_value']) ? 'amount-positive' : 'amount-negative' }}">
-                                        R$ {{ number_format($t->amount, 2, ',', '.') }}
+                                        US$ {{ number_format($t->amount, 2, ',', '.') }}
                                     </td>
                                     <td>{{ $t->transaction_date?->format('d/m/Y') ?? '-' }}</td>
                                 </tr>

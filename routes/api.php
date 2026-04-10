@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
         Route::get('internal-reports', [InternalReportController::class, 'index']);
         Route::post('internal-reports/generate', [InternalReportController::class, 'generate']);
+        Route::get('internal-reports/{internalReport}/pdf', [InternalReportController::class, 'pdf']);
         Route::post('internal-reports/batch-pdf', [InternalReportController::class, 'batchPdf']);
         Route::delete('internal-reports/{internalReport}', [InternalReportController::class, 'destroy']);
     });
